@@ -364,7 +364,7 @@ export class SpineGameObject extends DepthMixin(
 		if (newType) {
 			// Ensure framebuffer is properly set up.
 			if (drawingContext.renderer.renderNodes.currentBatchDrawingContext !== drawingContext) {
-				drawingContext.use();
+				drawingContext.renderer.renderNodes.finishBatch();
 				drawingContext.beginDraw();
 			}
 
@@ -379,7 +379,8 @@ export class SpineGameObject extends DepthMixin(
 		let transform = Phaser.GameObjects.GetCalcMatrix(
 			src,
 			camera,
-			parentMatrix
+			parentMatrix,
+			!drawingContext.useCanvas,
 		).calc;
 		let a = transform.a,
 			b = transform.b,
