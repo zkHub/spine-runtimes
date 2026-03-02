@@ -27,14 +27,16 @@
  * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
-import { MeshAttachment, RegionAttachment } from '@esotericsoftware/spine-core';
+import { SkeletonRenderer as CanvasSkeletonRenderer, MeshAttachment, RegionAttachment } from '@esotericsoftware/spine-canvas';
 import {
 	type BLEND_MODES,
+	CanvasRenderer,
 	type Container, ExtensionType,
 	extensions,
 	type InstructionSet,
 	type Renderer,
 	type RenderPipe,
+	RendererType,
 } from 'pixi.js';
 import { BatchableSpineSlot } from './BatchableSpineSlot.js';
 import type { Spine } from './Spine.js';
@@ -61,6 +63,7 @@ export class SpinePipe implements RenderPipe<Spine> {
 	} as const;
 
 	renderer: Renderer;
+	private canvasSkeletonRenderer!: CanvasSkeletonRenderer;
 
 	private gpuSpineData: Record<string, GpuSpineDataElement> = {};
 	private readonly _destroyRenderableBound = this.destroyRenderable.bind(this) as (renderable: Container) => void;
@@ -70,6 +73,10 @@ export class SpinePipe implements RenderPipe<Spine> {
 	}
 
 	validateRenderable (spine: Spine): boolean {
+		if (this.renderer.type === RendererType.CANVAS) {
+			return true;
+		}
+
 		spine._validateAndTransformAttachments();
 
 		// if spine attachments have changed or destroyed, we need to rebuild the batch!
@@ -105,7 +112,38 @@ export class SpinePipe implements RenderPipe<Spine> {
 		return false;
 	}
 
+	execute (spine: Spine) {
+		if (this.renderer.type === RendererType.CANVAS) {
+			const renderer = (this.renderer as CanvasRenderer);
+			const groupAlpha = ((spine.groupColorAlpha >>> 24) & 0xFF) / 255;
+			const contextSystem = renderer.canvasContext;
+			const context = contextSystem.activeContext;
+
+			context.save();
+
+			if (!this.canvasSkeletonRenderer) {
+				this.canvasSkeletonRenderer = new CanvasSkeletonRenderer(context as unknown as CanvasRenderingContext2D);
+				this.canvasSkeletonRenderer.triangleRendering = true;
+			}
+
+			contextSystem.setContextTransform(spine.groupTransform, (renderer._roundPixels | spine._roundPixels) === 1);
+
+			const oldAlpha = spine.skeleton.color.a;
+			spine.skeleton.color.a *= groupAlpha;
+			this.canvasSkeletonRenderer.draw(spine.skeleton);
+			spine.skeleton.color.a = oldAlpha;
+
+			context.restore();
+		}
+	}
+
 	addRenderable (spine: Spine, instructionSet: InstructionSet) {
+		if (this.renderer.type === RendererType.CANVAS) {
+			this.renderer.renderPipes.batch.break(instructionSet);
+			instructionSet.add(spine);
+			return;
+		}
+
 		const gpuSpine = this._getSpineData(spine);
 
 		const batcher = this.renderer.renderPipes.batch;
@@ -192,6 +230,7 @@ export class SpinePipe implements RenderPipe<Spine> {
 	destroy () {
 		this.gpuSpineData = null as any;
 		this.renderer = null as any;
+		this.canvasSkeletonRenderer = null as any;
 	}
 
 	private _getSpineData (spine: Spine): GpuSpineDataElement {

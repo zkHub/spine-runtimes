@@ -58,7 +58,7 @@ struct DressUp: View {
                 SpineView(
                     from: .drawable(drawable),
                     controller: model.controller,
-                    boundsProvider: SkinAndAnimationBounds(skins: ["full-skins/girl"])
+                    boundsProvider: model.boundsProvider
                 )
             } else {
                 Spacer()
@@ -76,6 +76,7 @@ struct DressUp: View {
 final class DressUpModel: ObservableObject {
     
     let thumbnailSize = CGSize(width: 200, height: 200)
+    let boundsProvider: BoundsProvider = SkinAndAnimationBounds(skins: ["full-skins/girl"])
     
     @Published
     var controller: SpineController
@@ -118,6 +119,7 @@ final class DressUpModel: ObservableObject {
                     try skin.name.flatMap { skinName in
                         self.skinImages[skinName] = try drawable.renderToImage(
                             size: self.thumbnailSize,
+                            boundsProvider: self.boundsProvider,
                             backgroundColor: .white,
                             scaleFactor: UIScreen.main.scale
                         )

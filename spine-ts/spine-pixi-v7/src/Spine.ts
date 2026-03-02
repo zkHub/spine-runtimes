@@ -102,6 +102,9 @@ export interface SpineFromOptions {
 
 	/** The bounds provider to use. If undefined the bounds will be dynamic, calculated when requested and based on the current frame. */
 	boundsProvider?: SpineBoundsProvider,
+
+	/** The ticker to use when {@link autoUpdate} is `true`. Defaults to {@link Ticker.shared}. */
+	ticker?: Ticker,
 };
 
 export interface SpineOptions {
@@ -116,6 +119,9 @@ export interface SpineOptions {
 
 	/**  See {@link SpineFromOptions.boundsProvider}. */
 	boundsProvider?: SpineBoundsProvider,
+
+	/** See {@link SpineFromOptions.ticker}. */
+	ticker?: Ticker,
 }
 
 /**
@@ -298,17 +304,36 @@ export class Spine extends Container {
 	afterUpdateWorldTransforms: (object: Spine) => void = () => { };
 
 	private _autoUpdate: boolean = false;
+	private _ticker: Ticker = Ticker.shared;
+
 	public get autoUpdate (): boolean {
 		return this._autoUpdate;
 	}
-	/** When `true`, the Spine AnimationState and the Skeleton will be automatically updated using the {@link Ticker.shared} instance. */
+	/** When `true`, the Spine AnimationState and the Skeleton will be automatically updated using the {@link ticker}. */
 	public set autoUpdate (value: boolean) {
 		if (value && !this._autoUpdate) {
-			Ticker.shared.add(this.internalUpdate, this);
+			this._ticker.add(this.internalUpdate, this);
 		} else if (!value && this._autoUpdate) {
-			Ticker.shared.remove(this.internalUpdate, this);
+			this._ticker.remove(this.internalUpdate, this);
 		}
 		this._autoUpdate = value;
+	}
+
+	/** The ticker to use when {@link autoUpdate} is `true`. Defaults to {@link Ticker.shared}. */
+	public get ticker (): Ticker {
+		return this._ticker;
+	}
+	/** Sets the ticker to use when {@link autoUpdate} is `true`. If `autoUpdate` is already `true`, the update callback will be moved from the old ticker to the new one. */
+	public set ticker (value: Ticker) {
+		value = value ?? Ticker.shared;
+		if (this._ticker === value) return;
+
+		if (this._autoUpdate) {
+			this._ticker.remove(this.internalUpdate, this);
+			value.add(this.internalUpdate, this);
+		}
+
+		this._ticker = value;
 	}
 
 	private meshesCache = new Map<Slot, ISlotMesh>();
@@ -338,7 +363,9 @@ export class Spine extends Container {
 			this.interactiveChildren = true;
 			this.hitArea = null;
 		}
-		this.calculateBounds();
+		if (!this.hasNeverUpdated) {
+			this.calculateBounds();
+		}
 	}
 	private _boundsPoint = new Point();
 	private _boundsSpineID = -1;
@@ -372,6 +399,7 @@ export class Spine extends Container {
 			this.initializeMeshFactory(oldOptions?.slotMeshFactory);
 		}
 
+		if (options?.ticker) this._ticker = options.ticker;
 		this.autoUpdate = options?.autoUpdate ?? true;
 
 		this.boundsProvider = options.boundsProvider;
@@ -406,7 +434,7 @@ export class Spine extends Container {
 		this.hasNeverUpdated = false;
 
 		// Because reasons, pixi uses deltaFrames at 60fps. We ignore the default deltaFrames and use the deltaSeconds from pixi ticker.
-		const delta = deltaSeconds ?? Ticker.shared.deltaMS / 1000;
+		const delta = deltaSeconds ?? this._ticker.deltaMS / 1000;
 		this.state.update(delta);
 		this.state.apply(this.skeleton);
 		this.beforeUpdateWorldTransforms(this);
@@ -426,6 +454,7 @@ export class Spine extends Container {
 	/** Destroy Spine game object elements, then call the {@link Container.destroy} with the given options */
 	public override destroy (options?: boolean | IDestroyOptions | undefined): void {
 		if (this.autoUpdate) this.autoUpdate = false;
+		(this._ticker as any) = null;
 		for (const [, mesh] of this.meshesCache) {
 			mesh?.destroy();
 		}
@@ -578,26 +607,18 @@ export class Spine extends Container {
 		slotObject.visible = this.skeleton.drawOrder.includes(slot) && followAttachmentValue;
 
 		if (slotObject.visible) {
-			slotObject.position.set(slot.bone.worldX, slot.bone.worldY);
-			slotObject.angle = slot.bone.getWorldRotationX();
+			let bone = slot.bone;
 
-			let bone: Bone | null = slot.bone;
-			let cumulativeScaleX = 1;
-			let cumulativeScaleY = 1;
-			while (bone) {
-				cumulativeScaleX *= bone.scaleX;
-				cumulativeScaleY *= bone.scaleY;
-				bone = bone.parent;
-			};
+			const matrix = slotObject.localTransform;
+			matrix.a = bone.a;
+			matrix.b = bone.c;
+			matrix.c = -bone.b;
+			matrix.d = -bone.d;
+			matrix.tx = bone.worldX;
+			matrix.ty = bone.worldY;
+			slotObject.transform.setFromMatrix(matrix);
 
-			if (cumulativeScaleX < 0) slotObject.angle -= 180;
-
-			slotObject.scale.set(
-				slot.bone.getWorldScaleX() * Math.sign(cumulativeScaleX),
-				slot.bone.getWorldScaleY() * Math.sign(cumulativeScaleY),
-			);
-
-			slotObject.zIndex = zIndex + 1;
+			slotObject.zIndex = zIndex;
 			slotObject.alpha = this.skeleton.color.a * slot.color.a;
 		}
 	}
@@ -972,7 +993,7 @@ export class Spine extends Container {
 			return Spine.oldFrom(paramOne, atlasAssetName!, options);
 		}
 
-		const { skeleton, atlas, scale = 1, darkTint, autoUpdate, boundsProvider } = paramOne;
+		const { skeleton, atlas, scale = 1, darkTint, autoUpdate, boundsProvider, ticker } = paramOne;
 		const cacheKey = `${skeleton}-${atlas}-${scale}`;
 		let skeletonData = Spine.skeletonCache[cacheKey];
 		if (!skeletonData) {
@@ -984,7 +1005,7 @@ export class Spine extends Container {
 			skeletonData = parser.readSkeletonData(skeletonAsset);
 			Spine.skeletonCache[cacheKey] = skeletonData;
 		}
-		return new Spine({ skeletonData, darkTint, autoUpdate, boundsProvider });
+		return new Spine({ skeletonData, darkTint, autoUpdate, boundsProvider, ticker });
 	}
 
 

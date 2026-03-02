@@ -43,7 +43,7 @@ For reference, have a look at our spine-cocos2dx example project in this reposit
 
 The spine-cocos2dx example works on Windows, Linux, macOS, iOS, Linux, and Android, for both cocos2d-x v3 and v4.
 
-Please [install the reprequisit software](https://docs.cocos2d-x.org/cocos2d-x/v4/en/installation/prerequisites.html) as per the Cocos2d-x documentation. Ensure that the following programs are in your `PATH` environment variable and thus executable from the command line:
+Please [install the prerequisite software](https://docs.cocos2d-x.org/cocos2d-x/v4/en/installation/prerequisites.html) as per the Cocos2d-x documentation. Ensure that the following programs are in your `PATH` environment variable and thus executable from the command line:
 
 - `git`
 - `cmake`

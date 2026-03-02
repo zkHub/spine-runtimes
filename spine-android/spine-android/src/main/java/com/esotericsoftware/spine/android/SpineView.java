@@ -351,10 +351,18 @@ public class SpineView extends View implements Choreographer.FrameCallback {
 	}
 
 	private void loadFrom (AndroidSkeletonDrawableLoader loader) {
+		if (controller == null) {
+			throw new IllegalStateException(
+				"SpineController is not set. When using SpineView from XML, call setController(...) before loadFromAsset/loadFromFile/loadFromHttp/loadFromDrawable.");
+		}
 		Handler mainHandler = new Handler(Looper.getMainLooper());
 		Thread backgroundThread = new Thread( () -> {
 			final AndroidSkeletonDrawable skeletonDrawable = loader.load();
 			mainHandler.post( () -> {
+				if (controller == null) {
+					throw new IllegalStateException(
+						"SpineController became null before initialization. Ensure setController(...) is called and not cleared until loading completes.");
+				}
 				computedBounds = boundsProvider.computeBounds(skeletonDrawable);
 				updateCanvasTransform();
 

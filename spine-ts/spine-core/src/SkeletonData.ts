@@ -27,7 +27,7 @@
  * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
-import { Animation } from "./Animation"
+import { Animation } from "./Animation.js"
 import { BoneData } from "./BoneData.js";
 import { EventData } from "./EventData.js";
 import { IkConstraintData } from "./IkConstraintData.js";

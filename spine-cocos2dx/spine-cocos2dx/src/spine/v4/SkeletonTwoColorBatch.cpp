@@ -61,7 +61,7 @@ namespace {
     \n #ifdef GL_ES\n
 					varying lowp vec4 v_light;
 			varying lowp vec4 v_dark;
-			varying mediump vec2 v_texCoord;
+			varying highp vec2 v_texCoord;
     \n #else \n
 					varying vec4 v_light;
 			varying vec4 v_dark;
@@ -78,12 +78,12 @@ namespace {
 
 	const char *TWO_COLOR_TINT_FRAGMENT_SHADER = STRINGIFY(
         \n #ifdef GL_ES\n
-					precision lowp float;
+					precision mediump float;
     \n #endif \n
 							uniform sampler2D u_texture;
 			varying vec4 v_light;
 			varying vec4 v_dark;
-			varying vec2 v_texCoord;
+			varying highp vec2 v_texCoord;
 
 			void main() {
 				vec4 texColor = texture2D(u_texture, v_texCoord);

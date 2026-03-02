@@ -1537,9 +1537,11 @@ namespace Spine.Unity.Editor {
 					unityAnimationEvent.stringParameter = spineEvent.String;
 					// if string (separate from name) is set in event, fallback to objectReferenceParameter.
 					unityAnimationEvent.objectReferenceParameter = SpineEventObjectPlaceholder;
-				} else if (spineEvent.Int != 0) {
+				}
+				if (spineEvent.Int != 0) {
 					unityAnimationEvent.intParameter = spineEvent.Int;
-				} else if (spineEvent.Float != 0) {
+				}
+				if (spineEvent.Float != 0) {
 					unityAnimationEvent.floatParameter = spineEvent.Float;
 				} // else, paramless function/Action.
 

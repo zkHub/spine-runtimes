@@ -510,7 +510,7 @@ export class Skeleton {
 	 * {@link #setSlotsToSetupPose()}. Also, often {@link AnimationState#apply()} is called before the next time the
 	 * skeleton is rendered to allow any attachment keys in the current animation(s) to hide or show attachments from the new skin.
 	 * @param newSkin May be null. */
-	setSkin (newSkin: Skin) {
+	setSkin (newSkin: Skin | null) {
 		if (newSkin == this.skin) return;
 		if (newSkin) {
 			if (this.skin)

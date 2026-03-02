@@ -60,7 +60,11 @@
 #include "core/math/transform_2d.h"
 #include "core/variant/array.h"
 #include "scene/resources/mesh.h"
+#if (VERSION_MAJOR >= 4 && VERSION_MINOR >= 6)
+#include "servers/rendering/rendering_server.h"
+#else
 #include "servers/rendering_server.h"
+#endif
 #include "scene/resources/canvas_item_material.h"
 #if VERSION_MINOR > 0 && defined(TOOLS_ENABLED)
 #include "editor/editor_interface.h"

@@ -37,6 +37,7 @@ public extension SkeletonDrawableWrapper {
     ///
     /// Parameters:
     ///     - size: The size of the `CGImage` that should be rendered.
+    ///     - boundsProvider: The skeleton bounds provider used to compute fitting and positioning.
     ///     - backgroundColor: the background color of the image
     ///     - scaleFactor: The scale factor. Set this to `UIScreen.main.scale` if you want to show the image in a view
     func renderToImage(size: CGSize, boundsProvider: BoundsProvider = SetupPoseBounds(), backgroundColor: UIColor, scaleFactor: CGFloat = 1) throws -> CGImage? {
