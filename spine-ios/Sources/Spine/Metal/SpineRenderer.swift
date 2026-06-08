@@ -184,6 +184,53 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
         }
     }
     
+    /// 离屏渲染：将给定 renderCommands 渲染到指定纹理，复用已上传的 atlas 纹理与管线。
+    /// 不依赖 MTKView 的 currentDrawable，适用于批量缩略图等离屏紧循环场景（无 drawable 池耗尽问题）。
+    /// - Parameters:
+    ///   - renderCommands: 当前骨架姿势的渲染命令
+    ///   - texture: 目标纹理（像素格式需与初始化时的 pixelFormat 一致）
+    ///   - bounds: 骨架包围盒（用于 .fit/.center 变换）
+    ///   - sizeInPixels: 目标纹理的像素尺寸
+    internal func renderOffscreen(
+        renderCommands: [RenderCommand],
+        to texture: MTLTexture,
+        bounds: CGRect,
+        sizeInPixels: CGSize,
+        clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+    ) {
+        guard sizeInPixels.width > 0, sizeInPixels.height > 0 else { return }
+
+        // 设置视口与变换（与在屏路径一致：.fit + .center）
+        sizeInPoints = CGSize(
+            width: sizeInPixels.width / UIScreen.main.scale,
+            height: sizeInPixels.height / UIScreen.main.scale
+        )
+        viewPortSize = vector_uint2(UInt32(sizeInPixels.width), UInt32(sizeInPixels.height))
+        setTransform(bounds: bounds, mode: .fit, alignment: .center)
+
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = texture
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].clearColor = clearColor
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+
+        bufferingSemaphore.wait()
+        currentBufferIndex = (currentBufferIndex + 1) % SpineRenderer.numberOfBuffers
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            bufferingSemaphore.signal()
+            return
+        }
+        draw(renderCommands: renderCommands, renderEncoder: renderEncoder)
+        renderEncoder.endEncoding()
+        commandBuffer.addCompletedHandler { [bufferingSemaphore] _ in
+            bufferingSemaphore.signal()
+        }
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+    }
+
     private func setTransform(bounds: CGRect, mode: Spine.ContentMode, alignment: Spine.Alignment) {
         let x = -bounds.minX - bounds.width / 2.0
         let y = -bounds.minY - bounds.height / 2.0
@@ -230,7 +277,7 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
         delegate?.spineRendererDidUpdate(self)
     }
         
-    private func draw(renderCommands: [RenderCommand], renderEncoder: MTLRenderCommandEncoder, in view: MTKView) {
+    private func draw(renderCommands: [RenderCommand], renderEncoder: MTLRenderCommandEncoder, in view: MTKView? = nil) {
         let allVertices = renderCommands.map { renderCommand in
             Array(renderCommand.getVertices())
         }
