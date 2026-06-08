@@ -317,7 +317,7 @@ export class Spine extends ViewContainer {
 	private darkTint = false;
 	private _debug?: ISpineDebugRenderer | undefined = undefined;
 
-	readonly _slotsObject: Record<string, { slot: Slot, container: Container, followAttachmentTimeline: boolean } | null> = Object.create(null);
+	readonly _slotsObject: Record<string, { slot: Slot, container: Container, followAttachmentTimeline: boolean, followSlotColor: boolean } | null> = Object.create(null);
 	private clippingSlotToPixiMasks: Record<string, SlotsToClipping> = Object.create(null);
 
 	private getSlotFromRef (slotRef: number | string | Slot): Slot {
@@ -808,11 +808,14 @@ export class Spine extends ViewContainer {
 		}
 	}
 
-	private updateSlotObject (slotAttachment: { slot: Slot, container: Container, followAttachmentTimeline: boolean }) {
+	private updateSlotObject (slotAttachment: { slot: Slot, container: Container, followAttachmentTimeline: boolean, followSlotColor: boolean }) {
 		const { slot, container } = slotAttachment;
 
 		const followAttachmentValue = slotAttachment.followAttachmentTimeline ? Boolean(slot.attachment) : true;
-		container.visible = this.skeleton.drawOrder.includes(slot) && followAttachmentValue;
+		const slotAlpha = this.skeleton.color.a * slot.color.a;
+
+		container.visible = this.skeleton.drawOrder.includes(slot) && followAttachmentValue
+			&& this.alpha > 0 && slotAlpha > 0;
 
 		if (container.visible) {
 			let bone = slot.bone;
@@ -826,7 +829,14 @@ export class Spine extends ViewContainer {
 			matrix.ty = bone.worldY;
 			container.setFromMatrix(matrix);
 
-			container.alpha = this.skeleton.color.a * slot.color.a;
+			container.alpha = slotAlpha;
+
+			if (slotAttachment.followSlotColor) {
+				container.tint =
+					((255 * this.skeleton.color.r * slot.color.r) << 16) |
+					((255 * this.skeleton.color.g * slot.color.g) << 8) |
+					(255 * this.skeleton.color.b * slot.color.b);
+			}
 		}
 	}
 
@@ -901,8 +911,9 @@ export class Spine extends ViewContainer {
 	 * @param slotRef - The slot id or  slot to attach to
 	 * @param options - Optional settings for the attachment.
 	 * @param options.followAttachmentTimeline - If true, the attachment will follow the slot's attachment timeline.
+	 * @param options.followSlotColor - If true, the container tint will follow the skeleton and slot colors.
 	 */
-	public addSlotObject (slot: number | string | Slot, container: Container, options?: { followAttachmentTimeline?: boolean }) {
+	public addSlotObject (slot: number | string | Slot, container: Container, options?: { followAttachmentTimeline?: boolean, followSlotColor?: boolean }) {
 		slot = this.getSlotFromRef(slot);
 
 		// need to check in on the container too...
@@ -922,6 +933,7 @@ export class Spine extends ViewContainer {
 			container,
 			slot,
 			followAttachmentTimeline: options?.followAttachmentTimeline || false,
+			followSlotColor: options?.followSlotColor || false,
 		};
 		this._slotsObject[slot.data.name] = slotObject;
 

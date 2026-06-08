@@ -511,7 +511,7 @@ export class Spine extends Container {
 		}
 	}
 
-	public slotsObject = new Map<Slot, { container: Container, followAttachmentTimeline: boolean }>();
+	public slotsObject = new Map<Slot, { container: Container, followAttachmentTimeline: boolean, followSlotColor: boolean }>();
 	private getSlotFromRef (slotRef: number | string | Slot): Slot {
 		let slot: Slot | null;
 		if (typeof slotRef === 'number') slot = this.skeleton.slots[slotRef];
@@ -535,8 +535,9 @@ export class Spine extends Container {
 	 * @param pixiObject - The pixi Container to add.
 	 * @param options - Optional settings for the attachment.
 	 * @param options.followAttachmentTimeline - If true, the attachment will follow the slot's attachment timeline.
+	 * @param options.followSlotColor - If true, the container tint will follow the skeleton and slot colors.
 	 */
-	addSlotObject (slotRef: number | string | Slot, pixiObject: Container, options?: { followAttachmentTimeline?: boolean }): void {
+	addSlotObject (slotRef: number | string | Slot, pixiObject: Container, options?: { followAttachmentTimeline?: boolean, followSlotColor?: boolean }): void {
 		let slot = this.getSlotFromRef(slotRef);
 		const oldPixiObject = this.slotsObject.get(slot)?.container;
 		if (oldPixiObject && oldPixiObject === pixiObject) return;
@@ -554,6 +555,7 @@ export class Spine extends Container {
 		this.slotsObject.set(slot, {
 			container: pixiObject,
 			followAttachmentTimeline: options?.followAttachmentTimeline || false,
+			followSlotColor: options?.followSlotColor || false,
 		});
 		this.addChild(pixiObject);
 	}
@@ -600,7 +602,7 @@ export class Spine extends Container {
 	private verticesCache: NumberArrayLike = Utils.newFloatArray(1024);
 	private clippingSlotToPixiMasks: Record<string, SlotsToClipping> = {};
 
-	private updateSlotObject (element: { container: Container, followAttachmentTimeline: boolean }, slot: Slot, zIndex: number) {
+	private updateSlotObject (element: { container: Container, followAttachmentTimeline: boolean, followSlotColor: boolean }, slot: Slot, zIndex: number) {
 		const { container: slotObject, followAttachmentTimeline } = element
 
 		const followAttachmentValue = followAttachmentTimeline ? Boolean(slot.attachment) : true;
@@ -620,6 +622,24 @@ export class Spine extends Container {
 
 			slotObject.zIndex = zIndex;
 			slotObject.alpha = this.skeleton.color.a * slot.color.a;
+
+			if (element.followSlotColor) {
+				this.setSlotObjectTint(slotObject,
+					((255 * this.skeleton.color.r * slot.color.r) << 16) |
+					((255 * this.skeleton.color.g * slot.color.g) << 8) |
+					(255 * this.skeleton.color.b * slot.color.b)
+				);
+			}
+		}
+	}
+
+	private setSlotObjectTint (slotObject: Container, tint: number) {
+		const tintable = slotObject as Container & { tint?: number, children?: Container[] };
+
+		if ("tint" in tintable) tintable.tint = tint;
+
+		for (const child of tintable.children ?? []) {
+			this.setSlotObjectTint(child, tint);
 		}
 	}
 

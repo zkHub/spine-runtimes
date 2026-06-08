@@ -27,6 +27,10 @@
  * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
+#if UNITY_6000_0_OR_NEWER
+#define RIGIDBODY2D_USES_LINEAR_VELOCITY
+#endif
+
 // In order to respect TransformConstraints modifying the scale of parent bones,
 // GetScaleAffectingRootMotion() now uses parentBone.AScaleX and AScaleY instead
 // of previously used ScaleX and ScaleY. If you require the previous behaviour,
@@ -215,9 +219,15 @@ namespace Spine.Unity {
 						float deltaTime = Time.fixedDeltaTime;
 						float deltaTimeSquared = (deltaTime * deltaTime);
 
+#if RIGIDBODY2D_USES_LINEAR_VELOCITY
+						rigidBody2D.linearVelocity += rigidBody2D.gravityScale * Physics2D.gravity * deltaTime;
+						gravityAndVelocityMovement = 0.5f * rigidBody2D.gravityScale * Physics2D.gravity * deltaTimeSquared +
+							rigidBody2D.linearVelocity * deltaTime;
+#else
 						rigidBody2D.velocity += rigidBody2D.gravityScale * Physics2D.gravity * deltaTime;
 						gravityAndVelocityMovement = 0.5f * rigidBody2D.gravityScale * Physics2D.gravity * deltaTimeSquared +
 							rigidBody2D.velocity * deltaTime;
+#endif
 					}
 
 					Vector2 rigidbodyDisplacement2D = new Vector2(rigidbodyDisplacement.x, rigidbodyDisplacement.y);

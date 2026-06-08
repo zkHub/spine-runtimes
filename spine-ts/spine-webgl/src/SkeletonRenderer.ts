@@ -55,6 +55,14 @@ export class SkeletonRenderer {
 	private temp3 = new Color();
 	private temp4 = new Color();
 
+	/**
+	 * Batches additive slots together with normal slots by rendering additive slots with premultiplied alpha RGB and zero alpha,
+	 * while using normal PMA blending. This reduces draw calls for normal/additive/normal sequences with the same texture.
+	 *
+	 * Disabled by default in 4.2 to preserve exact additive alpha accumulation for transparent targets.
+	 */
+	pmaAdditiveBatching = false;
+
 	constructor (context: ManagedWebGLRenderingContext, twoColorTint: boolean = true) {
 		this.twoColorTint = twoColorTint;
 		if (twoColorTint)
@@ -135,14 +143,17 @@ export class SkeletonRenderer {
 			if (texture) {
 				let slotColor = slot.color;
 				let finalColor = this.tempColor;
+				let slotBlendMode = slot.data.blendMode;
+				let additiveBlend = this.pmaAdditiveBatching && premultipliedAlpha && slotBlendMode == BlendMode.Additive;
+				let alpha = skeletonColor.a * slotColor.a * attachmentColor.a;
 				finalColor.r = skeletonColor.r * slotColor.r * attachmentColor.r;
 				finalColor.g = skeletonColor.g * slotColor.g * attachmentColor.g;
 				finalColor.b = skeletonColor.b * slotColor.b * attachmentColor.b;
-				finalColor.a = skeletonColor.a * slotColor.a * attachmentColor.a;
+				finalColor.a = additiveBlend ? 0 : alpha;
 				if (premultipliedAlpha) {
-					finalColor.r *= finalColor.a;
-					finalColor.g *= finalColor.a;
-					finalColor.b *= finalColor.a;
+					finalColor.r *= alpha;
+					finalColor.g *= alpha;
+					finalColor.b *= alpha;
 				}
 				let darkColor = this.tempColor2;
 				if (!slot.darkColor)
@@ -158,9 +169,9 @@ export class SkeletonRenderer {
 					darkColor.a = premultipliedAlpha ? 1.0 : 0.0;
 				}
 
-				let slotBlendMode = slot.data.blendMode;
-				if (slotBlendMode != blendMode) {
-					blendMode = slotBlendMode;
+				let batchBlendMode = additiveBlend ? BlendMode.Normal : slotBlendMode;
+				if (batchBlendMode != blendMode) {
+					blendMode = batchBlendMode;
 					batcher.setBlendMode(blendMode, premultipliedAlpha);
 				}
 

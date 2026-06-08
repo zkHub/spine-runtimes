@@ -33,6 +33,10 @@
 #define HINGE_JOINT_2019_BEHAVIOUR
 #endif
 
+#if UNITY_2023_1_OR_NEWER
+#define USE_COLLIDER_COMPOSITE_OPERATION
+#endif
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -140,7 +144,11 @@ namespace Spine.Unity.Examples {
 			RecursivelyCreateBoneProxies(startingBone);
 
 			RootRigidbody = boneTable[startingBone].GetComponent<Rigidbody2D>();
+#if USE_COLLIDER_COMPOSITE_OPERATION
+			RootRigidbody.bodyType = pinStartBone ? RigidbodyType2D.Kinematic : RigidbodyType2D.Dynamic;
+#else
 			RootRigidbody.isKinematic = pinStartBone;
+#endif
 			RootRigidbody.mass = rootMass;
 			List<Collider2D> boneColliders = new List<Collider2D>();
 			foreach (KeyValuePair<Bone, Transform> pair in boneTable) {

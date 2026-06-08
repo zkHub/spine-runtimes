@@ -39,6 +39,7 @@
 #define HAS_ON_POSTPROCESS_PREFAB
 #endif
 
+// Note: major_minor_OR_NEWER is automatically defined, but not major_minor_patch_OR_NEWER
 #if (UNITY_2020_3 && !(UNITY_2020_3_1 || UNITY_2020_3_2 || UNITY_2020_3_3 || UNITY_2020_3_4 || UNITY_2020_3_5 || UNITY_2020_3_6 || UNITY_2020_3_7 || UNITY_2020_3_8 || UNITY_2020_3_9 || UNITY_2020_3_10 || UNITY_2020_3_11 || UNITY_2020_3_12 || UNITY_2020_3_13 || UNITY_2020_3_14 || UNITY_2020_3_15))
 #define UNITY_2020_3_16_OR_NEWER
 #endif
@@ -46,7 +47,7 @@
 #define UNITY_2021_1_17_OR_NEWER
 #endif
 
-#if UNITY_2020_3_16_OR_NEWER || UNITY_2021_1_17_OR_NEWER
+#if UNITY_2020_3_16_OR_NEWER || UNITY_2021_1_17_OR_NEWER || UNITY_2021_2_OR_NEWER
 #define HAS_SAVE_ASSET_IF_DIRTY
 #endif
 
@@ -115,7 +116,6 @@ namespace Spine.Unity.Editor {
 						prefabsToRestore.Add(assetPath);
 					}
 				}
-				EditorUtility.UnloadUnusedAssetsImmediate();
 				AssetDatabase.StopAssetEditing();
 #if !HAS_SAVE_ASSET_IF_DIRTY
 				if (prefabAssets.Length > 0)
@@ -172,7 +172,6 @@ namespace Spine.Unity.Editor {
 #endif
 					}
 				}
-				EditorUtility.UnloadUnusedAssetsImmediate();
 				AssetDatabase.StopAssetEditing();
 #if !HAS_SAVE_ASSET_IF_DIRTY
 				if (textureLoadersToRestore.Count > 0)
@@ -226,7 +225,6 @@ namespace Spine.Unity.Editor {
 					AssetDatabase.SaveAssetIfDirty(atlasAsset);
 #endif
 				}
-				EditorUtility.UnloadUnusedAssetsImmediate();
 				AssetDatabase.StopAssetEditing();
 #if !HAS_SAVE_ASSET_IF_DIRTY
 				if (spriteAtlasAssets.Length > 0)

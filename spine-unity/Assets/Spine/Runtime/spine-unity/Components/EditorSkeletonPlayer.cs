@@ -27,6 +27,10 @@
  * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
+#if UNITY_2022_2_OR_NEWER
+#define USE_FIND_OBJECTS_BY_TYPE
+#endif
+
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.Callbacks;
@@ -54,7 +58,11 @@ namespace Spine.Unity {
 		[DidReloadScripts]
 		private static void OnReloaded () {
 			// Force start when scripts are reloaded
+#if USE_FIND_OBJECTS_BY_TYPE
+			EditorSkeletonPlayer[] editorSpineAnimations = FindObjectsByType<EditorSkeletonPlayer>(FindObjectsSortMode.None);
+#else
 			EditorSkeletonPlayer[] editorSpineAnimations = FindObjectsOfType<EditorSkeletonPlayer>();
+#endif
 
 			foreach (EditorSkeletonPlayer editorSpineAnimation in editorSpineAnimations)
 				editorSpineAnimation.Start();

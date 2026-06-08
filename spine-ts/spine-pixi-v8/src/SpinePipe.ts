@@ -90,6 +90,8 @@ export class SpinePipe implements RenderPipe<Spine> {
 			const drawOrder = spine.skeleton.drawOrder;
 			const gpuSpine = this.gpuSpineData[spine.uid];
 
+			if (!gpuSpine) return false;
+
 			for (let i = 0, n = drawOrder.length; i < n; i++) {
 				const slot = drawOrder[i];
 				const attachment = slot.getAttachment();
@@ -185,11 +187,9 @@ export class SpinePipe implements RenderPipe<Spine> {
 			if (containerAttachment) {
 				const container = containerAttachment.container;
 
-				if (!skipRender) {
-					container.includeInBuild = true;
-					// See https://github.com/pixijs/pixijs/blob/b4c050a791fe65e979e467c9cba2bda0c01a1c35/src/scene/container/utils/collectAllRenderables.ts#L28
-					container.collectRenderables(instructionSet, this.renderer, null!);
-				}
+				container.includeInBuild = true;
+				// See https://github.com/pixijs/pixijs/blob/b4c050a791fe65e979e467c9cba2bda0c01a1c35/src/scene/container/utils/collectAllRenderables.ts#L28
+				container.collectRenderables(instructionSet, this.renderer, null!);
 
 				container.includeInBuild = false;
 			}
@@ -198,6 +198,8 @@ export class SpinePipe implements RenderPipe<Spine> {
 
 	updateRenderable (spine: Spine) {
 		const gpuSpine = this.gpuSpineData[spine.uid];
+
+		if (!gpuSpine) return;
 
 		spine._validateAndTransformAttachments();
 

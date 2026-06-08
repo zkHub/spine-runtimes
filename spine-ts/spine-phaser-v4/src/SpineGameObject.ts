@@ -50,6 +50,8 @@ import {
 	Skin,
 	Vector2,
 } from "@esotericsoftware/spine-core";
+import type { SceneRenderer } from "@esotericsoftware/spine-webgl";
+import * as Phaser from "phaser";
 
 class BaseSpineGameObject extends Phaser.GameObjects.GameObject {
 	constructor (scene: Phaser.Scene, type: string) {
@@ -334,11 +336,56 @@ export class SpineGameObject extends DepthMixin(
 
 			if (this.plugin.gl && this.plugin.phaserRenderer instanceof Phaser.Renderer.WebGL.WebGLRenderer && sceneRenderer.batcher.isDrawing) {
 				sceneRenderer.end();
+				this.plugin.currentWebGLDrawingContext = null;
 				this.plugin.phaserRenderer.renderNodes.getNode("RebindContext")?.run();
 			}
 		}
 
 		return result;
+	}
+
+	private syncRendererCameraToDrawingContext (
+		sceneRenderer: SceneRenderer,
+		drawingContext: Phaser.Renderer.WebGL.DrawingContext,
+	) {
+		const viewportWidth = drawingContext.width;
+		const viewportHeight = drawingContext.height;
+		if (sceneRenderer.camera.viewportWidth === viewportWidth && sceneRenderer.camera.viewportHeight === viewportHeight &&
+			sceneRenderer.camera.position.x === viewportWidth / 2 && sceneRenderer.camera.position.y === viewportHeight / 2) {
+			return;
+		}
+
+		// Spine projects already-transformed Phaser vertices through its own orthographic camera,
+		// so the camera must match the active render target size for this draw pass.
+		sceneRenderer.camera.position.x = viewportWidth / 2;
+		sceneRenderer.camera.position.y = viewportHeight / 2;
+		sceneRenderer.camera.setViewport(viewportWidth, viewportHeight);
+		sceneRenderer.camera.update();
+	}
+
+	private isRenderableInDisplayList (gameObject: Phaser.GameObjects.GameObject | undefined, camera: Phaser.Cameras.Scene2D.Camera) {
+		if (!gameObject) return false;
+
+		const GameObjectRenderMask = 0xf;
+		return GameObjectRenderMask === gameObject.renderFlags &&
+			(gameObject.cameraFilter === 0 || !(gameObject.cameraFilter & camera.id)) &&
+			(gameObject as Phaser.GameObjects.GameObject & { visible?: boolean }).visible !== false;
+	}
+
+	private isAdjacentRenderableSpineGameObject (
+		src: SpineGameObject,
+		camera: Phaser.Cameras.Scene2D.Camera,
+		displayList: Phaser.GameObjects.GameObject[],
+		displayListIndex: number,
+		direction: -1 | 1
+	) {
+		for (let i = displayListIndex + direction; i >= 0 && i < displayList.length; i += direction) {
+			const gameObject = displayList[i];
+			if (!this.isRenderableInDisplayList(gameObject, camera)) continue;
+			return gameObject.type === src.type;
+		}
+
+		return false;
 	}
 
 	renderWebGL (
@@ -356,23 +403,34 @@ export class SpineGameObject extends DepthMixin(
 
 		let sceneRenderer = src.plugin.webGLRenderer;
 
-		// Determine object type in context.
-		const previousGameObject = displayList[displayListIndex - 1];
-		const nextGameObject = displayList[displayListIndex + 1];
-		const newType = !previousGameObject || previousGameObject.type !== src.type;
-		const nextTypeMatch = nextGameObject && nextGameObject.type === src.type;
-		if (newType) {
-			// Ensure framebuffer is properly set up.
-			if (drawingContext.renderer.renderNodes.currentBatchDrawingContext !== drawingContext) {
+		// Determine object type in context. Some display lists (containers/layers) contain
+		// invisible or otherwise skipped children, so scan for the adjacent renderable object.
+		const newType = !src.isAdjacentRenderableSpineGameObject(src, camera, displayList, displayListIndex, -1);
+		const nextTypeMatch = src.isAdjacentRenderableSpineGameObject(src, camera, displayList, displayListIndex, 1);
+		// Phaser's currentBatchDrawingContext is null while an external renderer owns the GL context.
+		// Track the drawing context ourselves so consecutive Spine objects can share one Spine batch.
+		const drawingContextChanged = src.plugin.currentWebGLDrawingContext !== drawingContext;
+		const shouldBeginSpineRenderer = newType || drawingContextChanged || !sceneRenderer.batcher.isDrawing;
+		if (shouldBeginSpineRenderer) {
+			if (sceneRenderer.batcher.isDrawing) {
+				sceneRenderer.end();
+				src.plugin.currentWebGLDrawingContext = null;
+			}
+
+			if (drawingContextChanged) {
+				// Ensure the framebuffer for the active draw pass is properly set up.
 				drawingContext.renderer.renderNodes.finishBatch();
 				drawingContext.beginDraw();
 			}
+
+			src.syncRendererCameraToDrawingContext(sceneRenderer, drawingContext);
 
 			// Yield Phaser context.
 			renderer.renderNodes.getNode('YieldContext')?.run(drawingContext);
 
 			// Enter Spine renderer.
 			sceneRenderer.begin();
+			src.plugin.currentWebGLDrawingContext = drawingContext;
 		}
 
 		camera.addToRenderList(src);
@@ -410,6 +468,7 @@ export class SpineGameObject extends DepthMixin(
 		if (!nextTypeMatch) {
 			// Exit Spine renderer.
 			sceneRenderer.end();
+			src.plugin.currentWebGLDrawingContext = null;
 
 			// Rebind Phaser state.
 			renderer.renderNodes.getNode('RebindContext')?.run(drawingContext);
