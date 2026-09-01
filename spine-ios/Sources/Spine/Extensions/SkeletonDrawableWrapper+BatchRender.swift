@@ -52,7 +52,7 @@ public extension SkeletonDrawableWrapper {
     /// 每个皮肤离屏渲染到独立的 `MTLTexture`，避免 MTKView drawable 生命周期问题。
     ///
     /// 注意：
-    /// - 必须在主线程调用。
+    /// - 可在串行后台队列调用，但同一个 drawable 不得被其他线程同时读写。
     /// - 会修改本 drawable 的 `skeleton.skin`，请使用独立 drawable，避免污染正在显示的骨架。
     ///
     /// - Parameters:
@@ -127,7 +127,9 @@ public extension SkeletonDrawableWrapper {
                 renderCommands: renderCommands,
                 to: texture,
                 bounds: bounds,
+                sizeInPoints: targetSize,
                 sizeInPixels: CGSize(width: pixelWidth, height: pixelHeight),
+                scaleFactor: scaleFactor,
                 clearColor: clearColor
             )
 
@@ -144,7 +146,7 @@ public extension SkeletonDrawableWrapper {
     /// 循环内逐帧推进 `animationState` 并 `renderOffscreen`，避免每帧重建 `SpineUIView`。
     ///
     /// 注意：
-    /// - 必须在主线程调用。
+    /// - 可在串行后台队列调用，但同一个 drawable 不得被其他线程同时读写。
     /// - 调用前需自行设置好皮肤、染色，并通过 `animationState.setAnimation(..., loop: true)` 启动动画。
     /// - 请使用独立 drawable，避免污染正在显示的骨架。
     ///
@@ -155,6 +157,7 @@ public extension SkeletonDrawableWrapper {
     ///   - size: 输出尺寸（点）；配合 `scaleFactor` 决定纹理像素大小。
     ///   - backgroundColor: 离屏清屏色，默认透明（导出合成时再铺白底）。
     ///   - scaleFactor: 缩放因子，默认 1。
+    ///   - usesLinearSampling: 是否使用线性纹理采样；导出帧可启用以减少缩放锯齿。
     ///   - stepAnimation: 是否在每帧推进动画；无动画的静态层设为 `false`。
     ///   - isCancelled: 可选取消回调；每个帧渲染前检查。
     ///   - onEach: 每帧渲染完成回调（帧索引, 图），便于渐进式更新进度。
@@ -166,6 +169,7 @@ public extension SkeletonDrawableWrapper {
         size: CGSize,
         backgroundColor: UIColor = .clear,
         scaleFactor: CGFloat = 1,
+        usesLinearSampling: Bool = false,
         stepAnimation: Bool = true,
         isCancelled: (() -> Bool)? = nil,
         onEach: ((Int, CGImage) -> Void)? = nil
@@ -180,7 +184,8 @@ public extension SkeletonDrawableWrapper {
             commandQueue: SpineObjects.shared.commandQueue,
             pixelFormat: pixelFormat,
             atlasPages: atlasPages,
-            pma: atlas.isPma
+            pma: atlas.isPma,
+            textureSampling: usesLinearSampling ? .linear : .nearest
         )
         renderer.waitUntilCompleted = true
 
@@ -223,7 +228,9 @@ public extension SkeletonDrawableWrapper {
                 renderCommands: renderCommands,
                 to: texture,
                 bounds: bounds,
+                sizeInPoints: size,
                 sizeInPixels: sizeInPixels,
+                scaleFactor: scaleFactor,
                 clearColor: clearColor
             )
 

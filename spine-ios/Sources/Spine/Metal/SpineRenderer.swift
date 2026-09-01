@@ -49,6 +49,11 @@ protocol SpineRendererDataSource: AnyObject {
     func renderCommands(_ spineRenderer: SpineRenderer) -> [RenderCommand]
 }
 
+internal enum SpineTextureSampling {
+    case nearest
+    case linear
+}
+
 internal final class SpineRenderer: NSObject, MTKViewDelegate {
     
     private let device: MTLDevice
@@ -56,6 +61,7 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
     private let commandQueue: MTLCommandQueue
     
     private var sizeInPoints: CGSize = .zero
+    private var contentScale: CGFloat = 1
     private var viewPortSize = vector_uint2(0, 0)
     private var transform = SpineTransform(
         translation: vector_float2(0, 0),
@@ -81,7 +87,8 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
         commandQueue: MTLCommandQueue,
         pixelFormat: MTLPixelFormat,
         atlasPages: [UIImage],
-        pma: Bool
+        pma: Bool,
+        textureSampling: SpineTextureSampling = .nearest
     ) throws {
         self.device = device
         self.commandQueue = commandQueue
@@ -117,7 +124,9 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
         for blendMode in blendModes {
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.vertexFunction = defaultLibrary.makeFunction(name: "vertexShader")
-            descriptor.fragmentFunction = defaultLibrary.makeFunction(name: "fragmentShader")
+            descriptor.fragmentFunction = defaultLibrary.makeFunction(
+                name: textureSampling == .linear ? "fragmentShaderLinear" : "fragmentShader"
+            )
             descriptor.colorAttachments[0].pixelFormat = pixelFormat
             descriptor.colorAttachments[0].apply(
                 blendMode: blendMode,
@@ -133,8 +142,9 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         guard let spineView = view as? SpineUIView else { return }
-        
-        sizeInPoints = CGSize(width: size.width / UIScreen.main.scale, height: size.height / UIScreen.main.scale)
+
+        contentScale = UIScreen.main.scale
+        sizeInPoints = CGSize(width: size.width / contentScale, height: size.height / contentScale)
         viewPortSize = vector_uint2(UInt32(size.width), UInt32(size.height))
         setTransform(
             bounds: spineView.computedBounds,
@@ -190,21 +200,28 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
     ///   - renderCommands: 当前骨架姿势的渲染命令
     ///   - texture: 目标纹理（像素格式需与初始化时的 pixelFormat 一致）
     ///   - bounds: 骨架包围盒（用于 .fit/.center 变换）
+    ///   - sizeInPoints: 输出逻辑尺寸。
     ///   - sizeInPixels: 目标纹理的像素尺寸
+    ///   - scaleFactor: 逻辑尺寸到纹理像素的缩放倍数。
     internal func renderOffscreen(
         renderCommands: [RenderCommand],
         to texture: MTLTexture,
         bounds: CGRect,
+        sizeInPoints: CGSize,
         sizeInPixels: CGSize,
+        scaleFactor: CGFloat,
         clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
     ) {
-        guard sizeInPixels.width > 0, sizeInPixels.height > 0 else { return }
+        guard sizeInPoints.width > 0,
+              sizeInPoints.height > 0,
+              sizeInPixels.width > 0,
+              sizeInPixels.height > 0,
+              scaleFactor > 0
+        else { return }
 
-        // 设置视口与变换（与在屏路径一致：.fit + .center）
-        sizeInPoints = CGSize(
-            width: sizeInPixels.width / UIScreen.main.scale,
-            height: sizeInPixels.height / UIScreen.main.scale
-        )
+        // 离屏路径由调用方传入逻辑尺寸和缩放倍数，不读取主线程 UI 状态。
+        self.sizeInPoints = sizeInPoints
+        contentScale = scaleFactor
         viewPortSize = vector_uint2(UInt32(sizeInPixels.width), UInt32(sizeInPixels.height))
         setTransform(bounds: bounds, mode: .fit, alignment: .center)
 
@@ -252,8 +269,8 @@ internal final class SpineRenderer: NSObject, MTKViewDelegate {
         
         transform = SpineTransform(
             translation: vector_float2(Float(x), Float(y)),
-            scale: vector_float2(Float(scaleX * UIScreen.main.scale), Float(scaleY * UIScreen.main.scale)),
-            offset: vector_float2(Float(offsetX * UIScreen.main.scale), Float(offsetY * UIScreen.main.scale))
+            scale: vector_float2(Float(scaleX * contentScale), Float(scaleY * contentScale)),
+            offset: vector_float2(Float(offsetX * contentScale), Float(offsetY * contentScale))
         )
         
         delegate?.spineRendererDidUpdate(
