@@ -46,6 +46,113 @@ import CoreGraphics
 import MetalKit
 import SpineCppLite
 
+/// 复用单个 Spine drawable 的渲染器和离屏纹理，供逐帧流式导出使用。
+/// 调用方负责推进动画状态，并保证 session 与 drawable 只在同一串行队列访问。
+public final class SpineOffscreenFrameRenderer {
+    private let drawable: SkeletonDrawableWrapper
+    private let renderer: SpineRenderer
+    private let texture: MTLTexture
+    private let bounds: CGRect
+    private let sizeInPoints: CGSize
+    private let sizeInPixels: CGSize
+    private let scaleFactor: CGFloat
+
+    public init(
+        drawable: SkeletonDrawableWrapper,
+        boundsProvider: BoundsProvider,
+        size: CGSize,
+        scaleFactor: CGFloat = 1,
+        usesLinearSampling: Bool = false
+    ) throws {
+        let bounds = boundsProvider.computeBounds(for: drawable)
+        guard bounds.origin.x.isFinite,
+              bounds.origin.y.isFinite,
+              bounds.width.isFinite,
+              bounds.height.isFinite,
+              bounds.width > 0,
+              bounds.height > 0,
+              size.width.isFinite,
+              size.height.isFinite,
+              size.width > 0,
+              size.height > 0,
+              scaleFactor.isFinite,
+              scaleFactor > 0
+        else {
+            throw NSError(
+                domain: "SpineOffscreenFrameRenderer",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "invalid render bounds or size"]
+            )
+        }
+
+        let pixelWidthValue = (size.width * scaleFactor).rounded()
+        let pixelHeightValue = (size.height * scaleFactor).rounded()
+        guard pixelWidthValue > 0,
+              pixelHeightValue > 0,
+              pixelWidthValue <= CGFloat(UInt32.max),
+              pixelHeightValue <= CGFloat(UInt32.max)
+        else {
+            throw NSError(
+                domain: "SpineOffscreenFrameRenderer",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "invalid render pixel size"]
+            )
+        }
+
+        let device = SpineObjects.shared.device
+        let pixelFormat: MTLPixelFormat = .bgra8Unorm
+        let renderer = try SpineRenderer(
+            device: device,
+            commandQueue: SpineObjects.shared.commandQueue,
+            pixelFormat: pixelFormat,
+            atlasPages: drawable.atlasPages,
+            pma: drawable.atlas.isPma,
+            textureSampling: usesLinearSampling ? .linear : .nearest
+        )
+        renderer.waitUntilCompleted = true
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: pixelFormat,
+            width: Int(pixelWidthValue),
+            height: Int(pixelHeightValue),
+            mipmapped: false
+        )
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            throw NSError(
+                domain: "SpineOffscreenFrameRenderer",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "cannot create render texture"]
+            )
+        }
+
+        self.drawable = drawable
+        self.renderer = renderer
+        self.texture = texture
+        self.bounds = bounds
+        self.sizeInPoints = size
+        self.sizeInPixels = CGSize(width: pixelWidthValue, height: pixelHeightValue)
+        self.scaleFactor = scaleFactor
+    }
+
+    /// 将 drawable 当前姿势渲染到复用纹理。返回值只在下一次 render 前保持内容稳定。
+    public func render(
+        backgroundColor: UIColor = .clear
+    ) -> MTLTexture {
+        renderer.renderOffscreen(
+            renderCommands: drawable.skeletonDrawable.render(),
+            to: texture,
+            bounds: bounds,
+            sizeInPoints: sizeInPoints,
+            sizeInPixels: sizeInPixels,
+            scaleFactor: scaleFactor,
+            clearColor: MTLClearColor(backgroundColor)
+        )
+        return texture
+    }
+}
+
 public extension SkeletonDrawableWrapper {
 
     /// 批量渲染多个皮肤为 `CGImage`：`SpineRenderer` 只创建一次（纹理/管线复用），
